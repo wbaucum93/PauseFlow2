@@ -1,0 +1,5 @@
+{
+  "name": "PauseFlow",
+  "description": "A SaaS web app designed to help subscription businesses reduce churn by letting customers pause instead of cancel their subscriptions.",
+  "requestFramePermissions": []
+}
