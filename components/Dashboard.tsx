@@ -1,3 +1,4 @@
+
 import React, { useState, useEffect } from 'react';
 import { ResponsiveContainer, AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip } from 'recharts';
 import { User, PauseEvent, EventType, SubscriptionStatus } from '../types';
@@ -77,14 +78,12 @@ const Header: React.FC<{ user: User, onLogout?: () => void }> = ({ user, onLogou
 
 const DashboardContent: React.FC = () => {
     const [stats, setStats] = useState({ revenueSaved: 0, activeCustomers: 0, pausedCustomers: 0, totalPauseEvents: 0 });
-    // TODO: Need to fetch connected account ID
-    const connectedAccountId = "acct_placeholder"; // This needs to be fetched and stored
 
     useEffect(() => {
         const fetchStats = async () => {
             try {
-                // TODO: Replace placeholder with real accountId
-                const data = await api.get(`/api/metrics/summary?accountId=${connectedAccountId}`);
+                // The backend now gets the accountId from the authenticated user session
+                const data = await api.get(`/api/metrics/summary`);
                 setStats(data);
             } catch (error) {
                 console.error("Failed to fetch dashboard stats:", error);
@@ -108,7 +107,7 @@ const DashboardContent: React.FC = () => {
                     <HistoryTable />
                 </div>
                 <div className="lg:col-span-1">
-                    <SubscriptionControls connectedAccountId={connectedAccountId} />
+                    <SubscriptionControls />
                 </div>
             </div>
         </>
@@ -206,7 +205,7 @@ const ConfirmationModal: React.FC<{
 };
 
 
-const SubscriptionControls: React.FC<{connectedAccountId: string}> = ({ connectedAccountId }) => {
+const SubscriptionControls: React.FC = () => {
     const [subId, setSubId] = useState('');
     const [reason, setReason] = useState('');
     const [isLoading, setIsLoading] = useState(false);
@@ -219,7 +218,7 @@ const SubscriptionControls: React.FC<{connectedAccountId: string}> = ({ connecte
     };
 
     const handleConfirmAction = async () => {
-        if (!modalState || !connectedAccountId) return;
+        if (!modalState) return;
 
         const { action } = modalState;
         setIsLoading(true);
@@ -227,8 +226,8 @@ const SubscriptionControls: React.FC<{connectedAccountId: string}> = ({ connecte
 
         try {
             const endpoint = action === 'pause' ? '/api/subscriptions/pause' : '/api/subscriptions/resume';
+            // The `accountId` is no longer needed; the backend gets it from the user's session.
             const payload = {
-                accountId: connectedAccountId,
                 stripeSubId: subId,
                 reason: action === 'pause' ? reason : undefined,
             };

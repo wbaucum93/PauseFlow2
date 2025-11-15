@@ -20,7 +20,8 @@ try {
         error: error instanceof Error ? error.message : String(error),
         stack: error instanceof Error ? error.stack : undefined,
     });
-    process.exit(1);
+    // FIX: Cast `process` to `any` to resolve a type error where `exit` is not found.
+    (process as any).exit(1);
 }
 
 export const auth = admin.auth();

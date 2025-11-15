@@ -1,11 +1,11 @@
 
-
 import { Router } from 'express';
 import { db } from '../config/firebase';
 import { firebaseAuthMiddleware } from '../middleware/auth';
 import { stripe } from '../config/stripe';
 import { ZodError } from 'zod';
 import { pauseSubscriptionSchema, resumeSubscriptionSchema } from '../schemas/subscriptions.schema';
+import { getStripeAccountId } from '../utils/stripe';
 import logger from '../config/logger';
 
 export const subscriptionsRouter = Router();
@@ -14,18 +14,19 @@ export const subscriptionsRouter = Router();
 subscriptionsRouter.get('/', firebaseAuthMiddleware, async (req, res) => {
     if (!req.user) return res.status(401).send({ error: 'Unauthorized' });
     const { uid } = req.user;
-    const { accountId } = req.query;
-
-    if (!accountId) {
-        return res.status(400).send({ error: 'accountId is required' });
-    }
 
     try {
+        // SECURITY FIX: Ensure the user has a connected account before proceeding.
+        const stripeAccountId = await getStripeAccountId(uid);
+        if (!stripeAccountId) {
+            return res.status(400).send({ error: 'User has no connected Stripe account.' });
+        }
+
         const snapshot = await db.collection('users').doc(uid).collection('subscriptions').get();
         const subscriptions = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
         res.status(200).send(subscriptions);
     } catch (error) {
-        logger.error({ message: `Error fetching subscriptions for user ${uid}`, accountId, error });
+        logger.error({ message: `Error fetching subscriptions for user ${uid}`, error });
         res.status(500).send({ error: 'Failed to fetch subscriptions' });
     }
 });
@@ -37,12 +38,18 @@ subscriptionsRouter.post('/pause', firebaseAuthMiddleware, async (req, res) => {
     const { uid } = req.user;
 
     try {
-        const { accountId, stripeSubId, reason } = pauseSubscriptionSchema.parse(req.body);
+        // SECURITY FIX: Fetch the user's Stripe Account ID from the database, not the request body.
+        const stripeAccountId = await getStripeAccountId(uid);
+        if (!stripeAccountId) {
+            return res.status(400).send({ error: 'User has no connected Stripe account.' });
+        }
+
+        const { stripeSubId, reason } = pauseSubscriptionSchema.parse(req.body);
 
         // 1. Update the subscription in Stripe
         await stripe.subscriptions.update(stripeSubId, 
             { pause_collection: { behavior: 'mark_uncollectible' } },
-            { stripeAccount: accountId }
+            { stripeAccount: stripeAccountId }
         );
 
         // 2. Update the subscription status in Firestore
@@ -58,7 +65,7 @@ subscriptionsRouter.post('/pause', firebaseAuthMiddleware, async (req, res) => {
             actor: 'admin', // or 'customer' if from portal
         });
 
-        logger.info({ message: `Subscription ${stripeSubId} paused for user ${uid}`, accountId, reason });
+        logger.info({ message: `Subscription ${stripeSubId} paused for user ${uid}`, accountId: stripeAccountId, reason });
         res.status(200).send({ success: true, message: `Subscription ${stripeSubId} paused.` });
     } catch (error) {
         if (error instanceof ZodError) {
@@ -79,12 +86,18 @@ subscriptionsRouter.post('/resume', firebaseAuthMiddleware, async (req, res) => 
     const { uid } = req.user;
     
     try {
-        const { accountId, stripeSubId } = resumeSubscriptionSchema.parse(req.body);
+        // SECURITY FIX: Fetch the user's Stripe Account ID from the database, not the request body.
+        const stripeAccountId = await getStripeAccountId(uid);
+        if (!stripeAccountId) {
+            return res.status(400).send({ error: 'User has no connected Stripe account.' });
+        }
+
+        const { stripeSubId } = resumeSubscriptionSchema.parse(req.body);
         
         // 1. Update subscription in Stripe
         await stripe.subscriptions.update(stripeSubId, 
             { pause_collection: null },
-            { stripeAccount: accountId }
+            { stripeAccount: stripeAccountId }
         );
         
         // 2. Update subscription status in Firestore
@@ -104,7 +117,7 @@ subscriptionsRouter.post('/resume', firebaseAuthMiddleware, async (req, res) => 
             await pauseDoc.ref.update({ resumedAt: new Date() });
         }
         
-        logger.info({ message: `Subscription ${stripeSubId} resumed for user ${uid}`, accountId });
+        logger.info({ message: `Subscription ${stripeSubId} resumed for user ${uid}`, accountId: stripeAccountId });
         res.status(200).send({ success: true, message: `Subscription ${stripeSubId} resumed.` });
     } catch (error) {
         if (error instanceof ZodError) {

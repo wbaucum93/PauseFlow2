@@ -1,3 +1,4 @@
+
 import React, { useState, useMemo, useEffect } from 'react';
 import { Customer, Plan, SubscriptionStatus } from '../types';
 import { Search, Download, MoreVertical } from './common/Icons';
@@ -22,15 +23,14 @@ const AdminPanel: React.FC = () => {
     const [searchTerm, setSearchTerm] = useState('');
     const [customers, setCustomers] = useState<Customer[]>([]);
     const [loading, setLoading] = useState(true);
-    // TODO: Need to fetch connected account ID
-    const connectedAccountId = "acct_placeholder";
 
     useEffect(() => {
         const fetchCustomers = async () => {
             setLoading(true);
             try {
-                // TODO: Replace placeholder with real accountId
-                const data = await api.get(`/api/subscriptions?accountId=${connectedAccountId}`);
+                // The backend now infers the accountId from the authenticated user.
+                // Sending it from the client is insecure and no longer necessary.
+                const data = await api.get(`/api/subscriptions`);
                 
                 if (Array.isArray(data)) {
                     // TODO: The backend might need to enrich this data with customer email, etc.

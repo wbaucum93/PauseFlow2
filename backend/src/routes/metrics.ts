@@ -1,6 +1,8 @@
+
 import { Router } from 'express';
 import { db } from '../config/firebase';
 import { firebaseAuthMiddleware } from '../middleware/auth';
+import { getStripeAccountId } from '../utils/stripe';
 import logger from '../config/logger';
 
 export const metricsRouter = Router();
@@ -8,13 +10,16 @@ export const metricsRouter = Router();
 metricsRouter.get('/summary', firebaseAuthMiddleware, async (req, res) => {
     if (!req.user) return res.status(401).send({ error: 'Unauthorized' });
     const { uid } = req.user;
-    const { accountId, range } = req.query; // range can be '30d', etc.
-
-    if (!accountId) {
-        return res.status(400).send({ error: 'accountId is required' });
-    }
+    const { range } = req.query; // range can be '30d', etc.
 
     try {
+        // SECURITY FIX: Do not trust accountId from the client.
+        // Fetch the user's connected Stripe Account ID securely on the server.
+        const stripeAccountId = await getStripeAccountId(uid);
+        if (!stripeAccountId) {
+            return res.status(400).send({ error: 'User has no connected Stripe account.' });
+        }
+
         // TODO: In a real app, these queries would be more complex and might involve
         // a dedicated analytics collection or service. This is a simplified version.
         
@@ -43,7 +48,7 @@ metricsRouter.get('/summary', firebaseAuthMiddleware, async (req, res) => {
             totalPauseEvents: totalPauses.data().count,
         });
     } catch (error) {
-        logger.error({ message: `Error fetching metrics summary for user ${uid}`, accountId, error });
+        logger.error({ message: `Error fetching metrics summary for user ${uid}`, error });
         res.status(500).send({ error: 'Failed to fetch metrics summary' });
     }
 });
