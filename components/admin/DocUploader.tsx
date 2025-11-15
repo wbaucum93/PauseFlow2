@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
+import DOMPurify from 'dompurify';
 import { geminiService } from '../../services/geminiService';
-// FIX: The file hooks/useMockData.ts is not a module. Use useMockBlogData instead.
 import { useMockBlogData } from '../../hooks/useMockBlogData';
 import { FileUp, CheckCircle } from '../common/Icons';
 
@@ -14,7 +14,6 @@ const DocUploader: React.FC<DocUploaderProps> = ({ onPublish }) => {
     const [processedContent, setProcessedContent] = useState<any | null>(null);
     const [error, setError] = useState('');
     const [successMessage, setSuccessMessage] = useState('');
-    // FIX: The file hooks/useMockData.ts is not a module. Use useMockBlogData instead.
     const { addPost } = useMockBlogData();
 
     useEffect(() => {
@@ -30,7 +29,8 @@ const DocUploader: React.FC<DocUploaderProps> = ({ onPublish }) => {
         setProcessedContent(null);
         try {
             const result = await geminiService.processGoogleDoc(docUrl);
-            setProcessedContent(result);
+            const sanitizedHtml = DOMPurify.sanitize(result.contentHTML ?? '');
+            setProcessedContent({ ...result, contentHTML: sanitizedHtml });
         } catch (err) {
             setError('Failed to process document. Please check the URL and try again.');
         } finally {
@@ -49,7 +49,7 @@ const DocUploader: React.FC<DocUploaderProps> = ({ onPublish }) => {
             category: processedContent.category,
             tags: processedContent.tags,
             coverImage: 'https://images.unsplash.com/photo-1517694712202-14dd9538aa97?ixlib=rb-4.0.3&ixid=MnwxMjA3fDB8MHxwaG90by1wYWdlfHx8fGVufDB8fHx8&auto=format&fit=crop&w=1770&q=80',
-            contentHTML: processedContent.contentHTML,
+            contentHTML: DOMPurify.sanitize(processedContent.contentHTML ?? ''),
             excerpt: processedContent.excerpt,
             published: false, // Always save as draft first
         };

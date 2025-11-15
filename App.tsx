@@ -82,7 +82,7 @@ export default function App() {
 
   // App Routes
   if (!user) {
-    return <LoginPage onLogin={(email) => login(email)} />;
+    return <LoginPage onLogin={(email, password) => login(email, password)} />;
   }
 
   if (user.status === SubscriptionStatus.INACTIVE || user.status === SubscriptionStatus.CANCELED) {

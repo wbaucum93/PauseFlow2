@@ -26,7 +26,8 @@
     "winston": "^3.18.3",
     "@jest/globals": "^30.2.0",
     "supertest": "^7.1.4",
-    "@sentry/node": "^10.25.0"
+    "@sentry/node": "^10.25.0",
+    "dompurify": "^3.1.6"
   },
   "devDependencies": {
     "@types/node": "^22.14.0",

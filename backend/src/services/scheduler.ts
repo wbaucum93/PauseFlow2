@@ -25,6 +25,7 @@ export async function syncStripeData() {
                 const subData = {
                     stripeSubId: subscription.id,
                     status: subscription.status,
+                    stripeAccountId,
                     // FIX: Cast subscription to 'any' to bypass incorrect type definition that lacks current_period_end.
                     currentPeriodEnd: new Date((subscription as any).current_period_end * 1000),
                     // ... and so on

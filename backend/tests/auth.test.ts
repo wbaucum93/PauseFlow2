@@ -3,23 +3,18 @@ import request from 'supertest';
 import app from '../src/index';
 import * as admin from 'firebase-admin';
 // FIX: Import Jest globals to resolve "Cannot find name" errors.
-import { describe, it, expect, jest } from '@jest/globals';
+import { describe, it, expect, jest, beforeEach } from '@jest/globals';
 
-// Mock the Firebase Admin SDK
-jest.mock('firebase-admin', () => ({
-    // We only need to mock the parts of the SDK we use
-    auth: () => ({
-      verifyIdToken: jest.fn().mockImplementation((token: string) => {
-        if (token === 'valid-token') {
-          return Promise.resolve({ uid: 'test-uid', email: 'test@example.com' });
-        }
-        // For any other token, reject the promise to simulate an invalid token
-        return Promise.reject(new Error('Invalid token specified'));
-      }),
-    }),
-    // We don't need initializeApp or firestore for this test, so we can omit them
-    // or provide dummy implementations if needed by other imports.
-}));
+const verifyIdTokenMock = (admin as any).__mock.verifyIdToken as jest.Mock;
+
+beforeEach(() => {
+  verifyIdTokenMock.mockImplementation(async (token: string) => {
+    if (token === 'valid-token') {
+      return { uid: 'test-uid', email: 'test@example.com' };
+    }
+    throw new Error('Invalid token specified');
+  });
+});
 
 
 describe('Firebase Auth Middleware', () => {
