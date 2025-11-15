@@ -1,48 +1,57 @@
 import { Router } from 'express';
-import { db } from '../config/firebase';
 import { firebaseAuthMiddleware } from '../middleware/auth';
 import logger from '../config/logger';
+import {
+    ensureUserOwnsAccount,
+    countPauseEvents,
+    countSubscriptionsByStatus,
+    sumPausedSubscriptionsMonthlyValue,
+    OwnershipError,
+    type OwnershipErrorCode,
+} from '../services/accountAccess';
 
 export const metricsRouter = Router();
+
+const ownershipReasonMap: Record<OwnershipErrorCode, string> = {
+    ACCOUNT_NOT_OWNED: 'account_not_owned',
+    SUBSCRIPTION_NOT_FOUND: 'subscription_not_found',
+    SUBSCRIPTION_NOT_OWNED: 'subscription_not_owned',
+};
 
 metricsRouter.get('/summary', firebaseAuthMiddleware, async (req, res) => {
     if (!req.user) return res.status(401).send({ error: 'Unauthorized' });
     const { uid } = req.user;
-    const { accountId, range } = req.query; // range can be '30d', etc.
+    const accountId = typeof req.query.accountId === 'string' ? req.query.accountId : undefined;
+    const { range } = req.query; // range can be '30d', etc.
 
     if (!accountId) {
         return res.status(400).send({ error: 'accountId is required' });
     }
 
     try {
-        // TODO: In a real app, these queries would be more complex and might involve
-        // a dedicated analytics collection or service. This is a simplified version.
-        
-        const subscriptionsRef = db.collection('users').doc(uid).collection('subscriptions');
+        await ensureUserOwnsAccount(uid, accountId);
 
-        const activeSubs = await subscriptionsRef.where('status', '==', 'active').count().get();
-        const pausedSubs = await subscriptionsRef.where('status', '==', 'paused').count().get();
-        
-        const pausesRef = db.collection('users').doc(uid).collection('pauses');
-        const totalPauses = await pausesRef.count().get();
-        
-        // Simplified revenue saved: sum of monthlyValue for all paused subscriptions
-        const pausedSubsSnapshot = await subscriptionsRef.where('status', '==', 'paused').get();
-        let revenueSaved = 0;
-        pausedSubsSnapshot.forEach(doc => {
-            revenueSaved += doc.data().monthlyValue || 0;
-        });
-        
+        const [activeCount, pausedCount, revenueSaved, pauseEventsCount] = await Promise.all([
+            countSubscriptionsByStatus(uid, accountId, 'active'),
+            countSubscriptionsByStatus(uid, accountId, 'paused'),
+            sumPausedSubscriptionsMonthlyValue(uid, accountId),
+            countPauseEvents(uid, accountId),
+        ]);
+
         // TODO: Implement chart data generation based on the 'range' query param
         // by querying the 'events' collection.
 
         res.status(200).send({
             revenueSaved,
-            activeCustomers: activeSubs.data().count,
-            pausedCustomers: pausedSubs.data().count,
-            totalPauseEvents: totalPauses.data().count,
+            activeCustomers: activeCount,
+            pausedCustomers: pausedCount,
+            totalPauseEvents: pauseEventsCount,
         });
     } catch (error) {
+        if (error instanceof OwnershipError) {
+            const reason = ownershipReasonMap[error.code] ?? 'account_not_owned';
+            return res.status(403).send({ error: 'forbidden', reason, message: error.message });
+        }
         logger.error({ message: `Error fetching metrics summary for user ${uid}`, accountId, error });
         res.status(500).send({ error: 'Failed to fetch metrics summary' });
     }

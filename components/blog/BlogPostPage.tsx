@@ -1,7 +1,7 @@
-import React, { useEffect } from 'react';
+import React, { useEffect, useMemo } from 'react';
 import { BlogPost } from '../../types';
-// FIX: Changed import from User to Users as User is not an exported member of Icons.
 import { PauseCircle, Calendar, Users, Tag, BookOpen } from '../common/Icons';
+import DOMPurify from 'dompurify';
 
 interface BlogPostProps {
   post: BlogPost;
@@ -42,6 +42,8 @@ const BlogPostPage: React.FC<BlogPostProps> = ({ post, onNavigate }) => {
         return Math.ceil(minutes);
     };
 
+    const sanitizedContent = useMemo(() => DOMPurify.sanitize(post.contentHTML ?? ''), [post.contentHTML]);
+
     return (
         <div className="bg-white dark:bg-gray-900 min-h-screen">
             <BlogHeader onNavigate={onNavigate} />
@@ -55,7 +57,6 @@ const BlogPostPage: React.FC<BlogPostProps> = ({ post, onNavigate }) => {
                         
                         <div className="mt-6 flex items-center justify-center space-x-6 text-sm text-gray-500 dark:text-gray-500">
                             <div className="flex items-center space-x-2">
-                                {/* FIX: Changed component from User to Users to match the available import. */}
                                 <Users className="w-4 h-4" />
                                 <span>{post.author}</span>
                             </div>
@@ -65,7 +66,7 @@ const BlogPostPage: React.FC<BlogPostProps> = ({ post, onNavigate }) => {
                             </div>
                              <div className="flex items-center space-x-2">
                                 <BookOpen className="w-4 h-4" />
-                                <span>{calculateReadTime(post.contentHTML)} min read</span>
+                                <span>{calculateReadTime(sanitizedContent)} min read</span>
                             </div>
                         </div>
                     </header>
@@ -73,7 +74,7 @@ const BlogPostPage: React.FC<BlogPostProps> = ({ post, onNavigate }) => {
                     <img src={post.coverImage} alt={post.title} className="w-full h-auto max-h-[500px] object-cover rounded-xl shadow-lg border border-gray-200 dark:border-gray-700"/>
 
                     <div className="mt-12 prose prose-lg dark:prose-invert max-w-none prose-indigo"
-                         dangerouslySetInnerHTML={{ __html: post.contentHTML }}
+                         dangerouslySetInnerHTML={{ __html: sanitizedContent }}
                     />
                     
                     <div className="mt-12 border-t border-gray-200 dark:border-gray-700 pt-8">

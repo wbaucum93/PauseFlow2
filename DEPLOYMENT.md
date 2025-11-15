@@ -37,6 +37,7 @@ This guide provides instructions for deploying the PauseFlow frontend and backen
 
 1.  **Configure Environment Variables:**
     - Rename `backend/.env.example` to `backend/.env` and fill it with the values you've collected.
+    - Add `BACKEND_BASE_URL`, pointing to the public URL where the backend will receive callbacks (e.g., your Cloud Run service URL).
     - The `FIREBASE_PRIVATE_KEY` needs to be formatted as a single line with `\n` characters for newlines.
 
 2.  **Deploy to Cloud Run:**
@@ -65,7 +66,7 @@ This guide provides instructions for deploying the PauseFlow frontend and backen
     - The `FIREBASE_PRIVATE_KEY` can be added as a multi-line secret.
 
 4.  **Get the Service URL:**
-    - Once deployed, Cloud Run will provide a public URL for your service (e.g., `https://pauseflow-backend-....run.app`). This is your `APP_BASE_URL` for the frontend.
+    - Once deployed, Cloud Run will provide a public URL for your service (e.g., `https://pauseflow-backend-....run.app`). This value should be used for both `VITE_API_BASE_URL` on the frontend and `BACKEND_BASE_URL` on the backend.
 
 ---
 

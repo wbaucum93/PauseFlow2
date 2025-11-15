@@ -6,13 +6,12 @@ import { db } from '../config/firebase';
 import Stripe from 'stripe';
 import { env } from '../config/env';
 import logger from '../config/logger';
+import { FieldValue } from 'firebase-admin/firestore';
 
 export const webhooksRouter = Router();
 
 // Use express.raw middleware for this route to get the raw body
-// FIX: Correctly type the request and response objects to resolve property access errors.
-// FIX: Changed `req` and `res` types to `any` to resolve persistent property access errors due to a likely type conflict.
-webhooksRouter.post('/stripe', raw({ type: 'application/json' }), async (req: any, res: any) => {
+webhooksRouter.post('/stripe', raw({ type: 'application/json' }), async (req: Request, res: Response) => {
     const sig = req.headers['stripe-signature'];
     const webhookSecret = env.STRIPE_WEBHOOK_SECRET;
 
@@ -38,16 +37,26 @@ webhooksRouter.post('/stripe', raw({ type: 'application/json' }), async (req: an
     }
     
     // Find the PauseFlow user associated with this Stripe account
-    const usersRef = db.collection('users');
-    const querySnapshot = await usersRef.where('stripeAccountId', '==', connectedAccountId).limit(1).get();
-    
-    if (querySnapshot.empty) {
+    const accountSnapshot = await db
+        .collectionGroup('connected_accounts')
+        .where('stripeAccountId', '==', connectedAccountId)
+        .limit(1)
+        .get();
+
+    if (accountSnapshot.empty) {
         logger.warn(`No user found for Stripe account: ${connectedAccountId}`);
         // Return 200 to acknowledge receipt of the event
         return res.status(200).send();
     }
-    const userDoc = querySnapshot.docs[0];
-    const uid = userDoc.id;
+    const accountDoc = accountSnapshot.docs[0];
+    const userRef = accountDoc.ref.parent.parent;
+
+    if (!userRef) {
+        logger.error({ message: 'Unable to resolve user reference from connected account document', connectedAccountId });
+        return res.status(200).send();
+    }
+
+    const uid = userRef.id;
     
     logger.info({ message: `Processing webhook event for user ${uid}`, eventType: event.type, accountId: connectedAccountId });
 
@@ -55,33 +64,85 @@ webhooksRouter.post('/stripe', raw({ type: 'application/json' }), async (req: an
     try {
         switch (event.type) {
             case 'customer.subscription.created':
-            case 'customer.subscription.updated':
+            case 'customer.subscription.updated': {
                 const subscription = event.data.object as Stripe.Subscription;
-                const subRef = db.collection('users').doc(uid).collection('subscriptions').doc(subscription.id);
+                const subRef = userRef.collection('subscriptions').doc(subscription.id);
                 await subRef.set({
                     stripeSubId: subscription.id,
                     customerId: subscription.customer,
                     status: subscription.status,
-                    // other fields...
+                    stripeAccountId: connectedAccountId,
+                    currentPeriodEnd: subscription.current_period_end
+                        ? new Date(subscription.current_period_end * 1000)
+                        : FieldValue.delete(),
+                    canceledAt: subscription.canceled_at ? new Date(subscription.canceled_at * 1000) : FieldValue.delete(),
+                    updatedAt: FieldValue.serverTimestamp(),
                 }, { merge: true });
                 break;
-            case 'customer.subscription.deleted':
+            }
+            case 'customer.subscription.deleted': {
                 const deletedSub = event.data.object as Stripe.Subscription;
-                await db.collection('users').doc(uid).collection('subscriptions').doc(deletedSub.id).delete();
+                await userRef.collection('subscriptions').doc(deletedSub.id).delete();
                 break;
+            }
             
             // Handle checkout.session.completed for new PauseFlow signups
-            case 'checkout.session.completed':
+            case 'checkout.session.completed': {
                 const session = event.data.object as Stripe.Checkout.Session;
-                if (session.metadata?.userId) {
-                     const userRef = db.collection('users').doc(session.metadata.userId);
-                     await userRef.update({
-                         plan: 'lifetime', // or based on line items
-                         planType: 'lifetime',
-                         status: 'active'
-                     });
+                const potentialUids = new Set<string>();
+                if (typeof session.metadata?.userId === 'string') {
+                    potentialUids.add(session.metadata.userId);
                 }
+                if (typeof session.client_reference_id === 'string') {
+                    potentialUids.add(session.client_reference_id);
+                }
+
+                let verifiedUid: string | undefined;
+
+                for (const candidateUid of potentialUids) {
+                    const record = await db
+                        .collection('users')
+                        .doc(candidateUid)
+                        .collection('checkout_sessions')
+                        .doc(session.id)
+                        .get();
+
+                    if (record.exists) {
+                        verifiedUid = candidateUid;
+                        await record.ref.delete().catch(() => undefined);
+                        break;
+                    }
+                }
+
+                if (!verifiedUid && session.customer) {
+                    const customerMatch = await db
+                        .collection('users')
+                        .where('stripeCustomerId', '==', session.customer)
+                        .limit(1)
+                        .get();
+                    if (!customerMatch.empty) {
+                        verifiedUid = customerMatch.docs[0].id;
+                    }
+                }
+
+                if (!verifiedUid) {
+                    logger.warn({
+                        message: 'Checkout session completed without matching user context',
+                        sessionId: session.id,
+                        customer: session.customer,
+                    });
+                    break;
+                }
+
+                const targetUserRef = db.collection('users').doc(verifiedUid);
+                await targetUserRef.set({
+                    plan: 'lifetime',
+                    planType: 'lifetime',
+                    status: 'active',
+                    updatedAt: FieldValue.serverTimestamp(),
+                }, { merge: true });
                 break;
+            }
 
             default:
                 logger.info(`Unhandled event type ${event.type} for account ${connectedAccountId}`);

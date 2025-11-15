@@ -16,10 +16,11 @@ export const env = cleanEnv(process.env, {
     STRIPE_PLATFORM_SECRET: str(),
     STRIPE_CLIENT_ID: str(),
     STRIPE_WEBHOOK_SECRET: str(),
-    
+
     // Application
     ALLOWED_ORIGINS: str(),
     FRONTEND_BASE_URL: url(),
+    BACKEND_BASE_URL: url(),
 
     // Optional
     SENTRY_DSN: str({ default: '' }),

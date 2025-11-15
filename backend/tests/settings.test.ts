@@ -3,7 +3,6 @@
 import request from 'supertest';
 import app from '../src/index';
 import { firebaseAuthMiddleware } from '../src/middleware/auth';
-import { db } from '../src/config/firebase';
 // FIX: Import Jest globals to resolve "Cannot find name" errors.
 import { describe, it, expect, jest, beforeEach } from '@jest/globals';
 // FIX: Import Express types for mocking middleware.
@@ -21,24 +20,30 @@ jest.mock('../src/middleware/auth', () => ({
   }),
 }));
 
-// Mock Firestore
-// FIX: Cast jest.fn() to jest.Mock to resolve type inference issues with mockResolvedValue.
-const setMock = (jest.fn() as jest.Mock).mockResolvedValue(true);
-jest.mock('../src/config/firebase', () => ({
+var setMock: jest.Mock;
+var collectionMock: jest.Mock;
+var docMock: jest.Mock;
+
+jest.mock('../src/config/firebase', () => {
+  collectionMock = jest.fn().mockReturnThis();
+  docMock = jest.fn().mockReturnThis();
+  setMock = jest.fn(async () => true);
+
+  return {
     db: {
-      collection: jest.fn().mockReturnThis(),
-      doc: jest.fn().mockReturnThis(),
-      set: setMock,
-      // Add get() mock if you were testing the GET route
+      collection: collectionMock,
+      doc: docMock,
+      set: (...args: any[]) => setMock(...args),
     },
-    auth: jest.fn(), // Mock auth as well if needed
-}));
+    auth: jest.fn(),
+  };
+});
 
 describe('PUT /api/settings', () => {
 
   beforeEach(() => {
     // Clear mock history before each test
-    (firebaseAuthMiddleware as jest.Mock).mockClear();
+    (firebaseAuthMiddleware as jest.MockedFunction<any>).mockClear();
     setMock.mockClear();
   });
 

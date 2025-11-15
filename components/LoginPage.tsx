@@ -2,7 +2,7 @@ import React, { useState } from 'react';
 import { Mail, Lock, PauseCircle } from './common/Icons';
 
 interface LoginPageProps {
-  onLogin: (email: string) => void;
+  onLogin: (email: string, password: string) => void;
 }
 
 const LoginPage: React.FC<LoginPageProps> = ({ onLogin }) => {
@@ -11,7 +11,7 @@ const LoginPage: React.FC<LoginPageProps> = ({ onLogin }) => {
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
-    onLogin(email);
+    onLogin(email, password);
   };
 
   return (
