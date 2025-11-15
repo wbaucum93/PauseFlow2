@@ -15,6 +15,9 @@ import { subscriptionsRouter } from './routes/subscriptions';
 import { settingsRouter } from './routes/settings';
 import { metricsRouter } from './routes/metrics';
 import { internalRouter } from './routes/internal';
+import { adminRouter } from './routes/admin';
+import { firebaseAuthMiddleware } from './middleware/auth';
+import { adminAuthMiddleware } from './middleware/adminAuthMiddleware';
 
 const app = express();
 const port = env.PORT;
@@ -108,6 +111,7 @@ app.use('/api/subscriptions', subscriptionsRouter);
 app.use('/api/settings', settingsRouter);
 app.use('/api/metrics', metricsRouter);
 app.use('/api/internal', internalRouter);
+app.use('/api/admin', firebaseAuthMiddleware, adminAuthMiddleware, adminRouter);
 
 // --- Sentry Error Handling Middleware ---
 // The Sentry error handler must be registered before any other error middleware
